@@ -1,0 +1,62 @@
+---
+- name: Установка Zabbix Server на сервер
+  hosts: zabbix
+  become: true
+
+  tasks:
+    - name: Скачиваем deb-пакет репозитория Zabbix
+      get_url:
+        url: https://repo.zabbix.com/zabbix/7.2/release/ubuntu/pool/main/z/zabbix-release/zabbix-release_latest_7.2+ubuntu22.04_all.deb
+        dest: /tmp/zabbix-release.deb
+
+    - name: Устанавливаем Zabbix репозиторий
+      apt:
+        deb: /tmp/zabbix-release.deb
+        state: present
+
+    - name: Обновляем apt-кеш
+      apt:
+        update_cache: true
+
+    - name: Устанавливаем PostgreSQL
+      apt:
+        name: postgresql
+        state: present
+
+    - name: Устанавливаем компоненты Zabbix
+      apt:
+        name:
+          - zabbix-server-pgsql
+          - zabbix-frontend-php
+          - php8.1-pgsql
+          - zabbix-apache-conf
+          - zabbix-sql-scripts
+          - zabbix-agent
+        state: present
+
+    - name: Создаём пользователя zabbix
+      become: true
+      shell: su - postgres -c "psql -c \"CREATE USER zabbix WITH PASSWORD '123456789';\""
+
+    - name: Создаём базу данных zabbix
+      become: true
+      shell: su - postgres -c "createdb -O zabbix zabbix"
+
+    - name: Импортируем схему в базу данных
+      become: true
+      shell: zcat /usr/share/zabbix/sql-scripts/postgresql/server.sql.gz | sudo -u zabbix psql zabbix
+
+    - name: Устанавливаем пароль к базе данных в конфиге
+      lineinfile:
+        path: /etc/zabbix/zabbix_server.conf
+        regexp: '^# DBPassword='
+        line: 'DBPassword=123456789'
+
+    - name: Перезапускаем Zabbix и Apache
+      systemd:
+        name: "{{ item }}"
+        state: restarted
+        enabled: yes
+      loop:
+        - zabbix-server
+        - apache2

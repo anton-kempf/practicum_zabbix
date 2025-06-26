@@ -1,0 +1,50 @@
+---
+- name: Установка Zabbix Agent на клиентов
+  hosts: zabbix_agents
+  become: true
+
+  vars:
+    zabbix_server_ip: "192.168.51.10"
+
+  tasks:
+    - name: Скачивание .deb-пакета Zabbix release
+      get_url:
+        url: https://repo.zabbix.com/zabbix/7.2/release/ubuntu/pool/main/z/zabbix-release/zabbix-release_latest_7.2+ubuntu22.04_all.deb
+        dest: /tmp/zabbix-release.deb
+
+    - name: Установка Zabbix репозитория
+      apt:
+        deb: /tmp/zabbix-release.deb
+
+    - name: Обновление apt-репозиториев
+      apt:
+        update_cache: yes
+
+    - name: Установка пакета zabbix-agent
+      apt:
+        name: zabbix-agent
+        state: present
+
+    - name: Настройка параметра Server
+      lineinfile:
+        path: /etc/zabbix/zabbix_agentd.conf
+        regexp: '^Server='
+        line: "Server={{ zabbix_server_ip }}"
+
+    - name: Настройка параметра ServerActive
+      lineinfile:
+        path: /etc/zabbix/zabbix_agentd.conf
+        regexp: '^ServerActive='
+        line: "ServerActive={{ zabbix_server_ip }}"
+
+    - name: Настройка параметра Hostname
+      lineinfile:
+        path: /etc/zabbix/zabbix_agentd.conf
+        regexp: '^Hostname='
+        line: "Hostname={{ inventory_hostname }}"
+
+    - name: Включение и запуск агента
+      systemd:
+        name: zabbix-agent
+        enabled: yes
+        state: restarted
